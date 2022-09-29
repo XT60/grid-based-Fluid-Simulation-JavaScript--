@@ -98,10 +98,11 @@ function projectVelocity(){
     calcVelDivergance(cells);
     solve(pSolverFunction);
     calcPGrandient(cells);
+    const vDivDebug = generateQuery(cells, 'vDiv');
+    const pDebug = generateQuery(cells, 'p');
+    const velDebug = generateQuery(cells, 'vel', formatVel)
+    const pGradDebug = generateQuery(cells, 'pGrad', formatVel);
     substractFields("vel", "pGrad");
-    // const vDivDebug = generateQuery(cells, 'vDiv');
-    // const pDebug = generateQuery(cells, 'p');
-    // const pGradDebug = generateQuery(cells, 'pGrad', formatVel);
 }
 
 // function muteVelocities(){
@@ -132,8 +133,8 @@ function initializeCells(){
 
 
 function resetPressure(){
-    for(let i = 1; i < cellCount-1; i++){
-        for(let j = 1; j < cellCount-1; j++){
+    for(let i = 0; i < cellCount; i++){
+        for(let j = 0; j < cellCount; j++){
             cells[i][j].p = 0;
         }
     }
@@ -173,11 +174,7 @@ function calcPGrandient(field){
 
 function pSolverFunction(i, j){
     let newP = 0;
-    if (cells[i] !== undefined && cells[i][j - 1] !== undefined)   newP += cells[i][j - 1].p;
-    if (cells[i] !== undefined && cells[i][j + 1] !== undefined)   newP += cells[i][j + 1].p;
-    if (cells[i - 1] !== undefined && cells[i - 1][j] !== undefined)   newP += cells[i - 1][j].p;
-    if (cells[i + 1] !== undefined && cells[i + 1][j] !== undefined)   newP += cells[i + 1][j].p;
-    
+    newP += cells[i][j - 1].p +  cells[i][j + 1].p +  cells[i - 1][j].p +  cells[i + 1][j].p;
     const tmp = cells[i][j].p;
     cells[i][j].p = (newP - cells[i][j].vDiv) / 4;
     return Math.abs(tmp - cells[i][j].p);
@@ -190,6 +187,7 @@ function diffuse(interval, attr){
     for(let i = 0; i < cellCount; i++){
         prevData[i] = [];
         for(let j = 0; j < cellCount; j++){
+            prevData[i][j] = {};
             if (attr === "vel"){
                 prevData[i][j][attr] = [...cells[i][j][attr]];
             }
@@ -198,23 +196,27 @@ function diffuse(interval, attr){
             }
         }
     }
-    const prevDebug = generateQuery(prevData, 'd'); 
+    const prevDebug = generateQuery(prevData, attr); 
 
-    function solveDiffusion(i, j, attr){
+    function solveVelDiffusion(i, j){
+        const tmp = [...cells[i][j].vel];
+        let xSum = cells[i][j - 1].vel[0] + cells[i][j + 1].vel[0] + cells[i - 1][j].vel[0] + cells[i + 1][j].vel[0],
+            ySum = cells[i][j - 1].vel[1] + cells[i][j + 1].vel[1] + cells[i - 1][j].vel[1] + cells[i + 1][j].vel[1];
+        cells[i][j].vel[0] = (prevData[i][j].vel[0] + diffusionFactor * interval * xSum) / (1 + 4 * diffusionFactor * interval);
+        cells[i][j].vel[1] = (prevData[i][j].vel[1] + diffusionFactor * interval * ySum) / (1 + 4 * diffusionFactor * interval);
+        return Math.abs(Math.max(tmp[0] - cells[i][j].vel[0], tmp[1] - cells[i][j].vel[1]));
+    }
+
+    function solveDensityDiffusion(i, j){
         let sum = cells[i][j - 1].d + cells[i][j + 1].d + cells[i - 1][j].d + cells[i + 1][j].d;
         const tmp = cells[i][j].d;
-        if (attr === "vel"){
-            cells[i][j].vel[0] = (prevData[i][j].vel[0] + diffusionFactor * interval * sum) / (1 + 4 * diffusionFactor * interval);
-            cells[i][j].vel[1] = (prevData[i][j].vel[1] + diffusionFactor * interval * sum) / (1 + 4 * diffusionFactor * interval);
-        }
-        else{
-            cells[i][j].d = (prevData[i][j].d + diffusionFactor * interval * sum) / (1 + 4 * diffusionFactor * interval);
-        }
+        cells[i][j].d = (prevData[i][j].d + diffusionFactor * interval * sum) / (1 + 4 * diffusionFactor * interval);
         return Math.abs(tmp - cells[i][j].d);
     }
 
-    solve((i, j) => solveDiffusion(i, j, attr));
-    set_bnd(attr);
+    if (attr === "vel") solve(solveVelDiffusion);
+    if (attr === "d") solve(solveDensityDiffusion);
+    setBnd(attr);
 }
 
 
@@ -234,10 +236,10 @@ function solve(solveFunction){
 function advect(interval, attr){
     // saving data before update
     const prevData = [];
-    for(let i = 1; i < cellCount - 1; i++){
+    for(let i = 0; i < cellCount; i++){
         prevData[i] = [];
-        for(let j = 1; j < cellCount - 1; j++){
-            if (attr === vel){
+        for(let j = 0; j < cellCount; j++){
+            if (attr === 'vel'){
                 prevData[i][j] = {
                     vel: cells[i][j].vel
                 }
@@ -254,62 +256,77 @@ function advect(interval, attr){
     // updating data
     for(let y = 0; y < cellCount; y++){
         for(let x = 0; x < cellCount; x++){
-            cells[y][x][attr] = getNewValue(cells[y][x], prevData, attr);
+            const cell = cells[y][x]; 
+            const prevPos = [x + 0.5 - cell.vel[0] * interval * advectionSpeed, y + 0.5 - cell.vel[1] * interval * advectionSpeed];
+            cell[attr] = getNewValue(prevData, attr, prevPos);
         }
     }
-    set_bnd(attr);
+    setBnd(attr);
+}
+
+function validatePosition(pos){
+    if (pos.float < 0){
+        pos.int -= 1;
+        pos.float += 1;
+    }
+    if (pos.int < 0){
+        pos.int = 0;
+        pos.float = 0;
+    }
+    else if(pos.int > cellCount - 2){
+        pos.int = cellCount - 2;
+        pos.float = 1;
+    }
 }
 
 
-function getNewValue(cell, prevData, attr){
-    const prevPos = [x + 0.5 - cell.vel[0] * interval * advectionSpeed, y + 0.5 - cell.vel[1] * interval * advectionSpeed];
+function getNewValue(prevData, attr, prevPos){
+    const x = {
+        int: Math.floor(prevPos[0])   
+    }        
+    x.float = prevPos[0] - x.int - 0.5; 
 
-    let xInt = Math.floor(prevPos[0]),   
-        xFloat = prevPos[0] - xInt - 0.5;              
-    if (xFloat < 0){
-        xInt -= 1;
-        xFloat += 1;
-    }
-    let yInt = Math.floor(prevPos[1]),
-        yFloat = prevPos[1] - yInt - 0.5;
-    if (yFloat < 0){
-        yInt -= 1;
-        yFloat += 1;
-    }
+    const y = {
+        int: Math.floor(prevPos[1])
+    } 
+    y.float = prevPos[1] - y.int - 0.5; 
+
+    validatePosition(x);
+    validatePosition(y);
 
     if (attr === "vel"){
-        let newVel = [0, 0]
-            k = (1 - xFloat) * (1 - yFloat);                    // topLeft
-        newVel[0] += prevData[yInt][xInt].vel[0] * k;
-        newVel[1] += prevData[yInt][xInt].vel[1] * k;
-        k = (1 - xFloat) * yFloat;                              // bottomLeft
-        newVel[0] += prevData[yInt + 1][xInt].vel[0] * k;
-        newVel[1] += prevData[yInt + 1][xInt].vel[1] * k;
-        k = xFloat * (1 - yFloat);                              // topRight
-        newVel[0] += prevData[yInt][xInt + 1].vel[0] * k;
-        newVel[1] += prevData[yInt][xInt + 1].vel[1] * k;
-        k = xFloat * yFloat;                                    // bottomRight
-        newVel[0] += prevData[yInt + 1][xInt + 1].vel[0] * k;
-        newVel[1] += prevData[yInt + 1][xInt + 1].vel[1] * k;
+        let newVel = [0, 0],
+            k = (1 - x.float) * (1 - y.float);                    // topLeft
+        newVel[0] += prevData[y.int][x.int].vel[0] * k;
+        newVel[1] += prevData[y.int][x.int].vel[1] * k;
+        k = (1 - x.float) * y.float;                              // bottomLeft
+        newVel[0] += prevData[y.int + 1][x.int].vel[0] * k;
+        newVel[1] += prevData[y.int + 1][x.int].vel[1] * k;
+        k = x.float * (1 - y.float);                              // topRight
+        newVel[0] += prevData[y.int][x.int + 1].vel[0] * k;
+        newVel[1] += prevData[y.int][x.int + 1].vel[1] * k;
+        k = x.float * y.float;                                    // bottomRight
+        newVel[0] += prevData[y.int + 1][x.int + 1].vel[0] * k;
+        newVel[1] += prevData[y.int + 1][x.int + 1].vel[1] * k;
         return newVel;
     }
     else{
         let newD = 0;
-        newD += prevData[yInt][xInt].d * (1 - xFloat) * (1 - yFloat);
-        newD += prevData[yInt + 1][xInt].d * (1 - xFloat) * yFloat;
-        newD += prevData[yInt][xInt + 1].d * xFloat * (1 - yFloat);
-        newD += prevData[yInt + 1][xInt + 1].d * xFloat * yFloat;
+        newD += prevData[y.int][x.int].d * (1 - x.float) * (1 - y.float);
+        newD += prevData[y.int + 1][x.int].d * (1 - x.float) * y.float;
+        newD += prevData[y.int][x.int + 1].d * x.float * (1 - y.float);
+        newD += prevData[y.int + 1][x.int + 1].d * x.float * y.float;
         return newD;
     }
 }
 
 
-function set_bnd(attr){
+function setBnd(attr){
     const N = cellCount - 1;
     for(let i = 0; i < cellCount; i++){
         if (attr === "vel"){
             cells[i][0].vel[0] = -cells[i][1].vel[0];
-            cells[i][N].vel[0] = -cells[i][1][N - 1][0];
+            cells[i][N].vel[0] = -cells[i][N - 1].vel[0];
             cells[0][i].vel[1] = -cells[1][i].vel[1];
             cells[N][i].vel[1] = -cells[N - 1][i].vel[1];
         }
@@ -320,7 +337,7 @@ function set_bnd(attr){
             cells[N][i][attr] = cells[N - 1][i][attr];
         }
     }
-    
+
     if (attr === "vel"){
         cells[0][0].vel[0] = (cells[0][1].vel[0] + cells[1][0].vel[0]) / 2;
         cells[0][0].vel[1] = (cells[0][1].vel[1] + cells[1][0].vel[1]) / 2;
@@ -382,9 +399,9 @@ function drawRect(x, y, alpha){
 // debug
 function generateQuery(objects, attr, formatFunc){
     const res = [];
-    for(let i = 0; i < objects.length; i++){
+    for(let i = 1; i < objects.length - 1; i++){
         res[i] = [];
-        for(let j = 0; j < objects.length; j++){
+        for(let j = 1; j < objects.length - 1; j++){
             if (formatFunc){
                 res[i][j] = formatFunc(objects[i][j][attr]);
             }
