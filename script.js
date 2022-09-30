@@ -20,7 +20,9 @@ const canvas = document.querySelector("canvas"),
       advectionSpeed = 0.001,
       velMultiplier = 0.5,
       densityInput = 1,
+      divFactor = 0.5 / cellCount 
       muteFactor = 0.95;
+    
 
 let lastClick,
     lastTime, 
@@ -97,6 +99,7 @@ window.requestAnimationFrame(loop)
 function projectVelocity(){
     calcVelDivergance(cells);
     solve(pSolverFunction);
+    setBnd('p');
     calcPGrandient(cells);
     const vDivDebug = generateQuery(cells, 'vDiv');
     const pDebug = generateQuery(cells, 'p');
@@ -258,6 +261,9 @@ function advect(interval, attr){
         for(let x = 0; x < cellCount; x++){
             const cell = cells[y][x]; 
             const prevPos = [x + 0.5 - cell.vel[0] * interval * advectionSpeed, y + 0.5 - cell.vel[1] * interval * advectionSpeed];
+            if (isNaN(prevPos[0]) || isNaN(prevPos[1])){
+                console.log("debug1");
+            }
             cell[attr] = getNewValue(prevData, attr, prevPos);
         }
     }
@@ -297,6 +303,9 @@ function getNewValue(prevData, attr, prevPos){
     if (attr === "vel"){
         let newVel = [0, 0],
             k = (1 - x.float) * (1 - y.float);                    // topLeft
+        if (prevData[y.int][x.int] === undefined){
+            console.log("debug1");
+        }
         newVel[0] += prevData[y.int][x.int].vel[0] * k;
         newVel[1] += prevData[y.int][x.int].vel[1] * k;
         k = (1 - x.float) * y.float;                              // bottomLeft
@@ -332,7 +341,7 @@ function setBnd(attr){
         }
         else{
             cells[i][0][attr] = cells[i][1][attr];
-            cells[i][N][attr] = cells[i][1][N - 1];
+            cells[i][N][attr] = cells[i][N - 1][attr];
             cells[0][i][attr] = cells[1][i][attr];
             cells[N][i][attr] = cells[N - 1][i][attr];
         }
@@ -399,9 +408,9 @@ function drawRect(x, y, alpha){
 // debug
 function generateQuery(objects, attr, formatFunc){
     const res = [];
-    for(let i = 1; i < objects.length - 1; i++){
+    for(let i = 0; i < objects.length; i++){
         res[i] = [];
-        for(let j = 1; j < objects.length - 1; j++){
+        for(let j = 0; j < objects.length; j++){
             if (formatFunc){
                 res[i][j] = formatFunc(objects[i][j][attr]);
             }
@@ -415,5 +424,6 @@ function generateQuery(objects, attr, formatFunc){
 
 
 function formatVel(vel){
-    return `${vel[0]},${vel[1]}`;
+    if (vel) return vel[0].toFixed(2) + ',' + vel[1].toFixed(2);
 }
+    
