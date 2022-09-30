@@ -13,7 +13,7 @@ const canvas = document.querySelector('canvas'),
       color = [255, 51, 255],
       rectWidth = 1,
       rectHeight = 1,
-      cellCount = 25,
+      cellCount = 80,
       solverError = 0.01,
       cells = [],
       advectionSpeed = 0.01,
@@ -40,7 +40,6 @@ canvas.setAttribute('height', `${cellCount - 2}px`);
 // listeners
 document.addEventListener('mousedown', (e) => {
     lastClick = getMousePos(e);
-    // console.log(`mouse clicked at ${pos}`);
 });
 
 document.addEventListener('mouseup', (e) => {
@@ -55,10 +54,6 @@ document.addEventListener('mouseup', (e) => {
         vel
     };
     lastClick = undefined;
-    
-    console.log(userInput);
-    // console.log(`mouse dragged from ${lastClick} to ${getMousePos(e)}`);
-
 });
 
 
@@ -73,9 +68,6 @@ function loop(currTime){
     const interval = debugInterval;
     resetPressure();
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    if (userInput){
-        console.log('do nothing')
-    }
     handleUserInput();
 
     // velocity handling
@@ -84,13 +76,9 @@ function loop(currTime){
     myAdvect(interval, 'vel');
     projectVelocity();
     
-
     // density handling
     myAdvect(interval, 'd');
     diffuse(interval, 'd');
-    // let dDebug = generateQuery(cells, 'd');
-    // dDebug = generateQuery(cells, 'd');
-    
 
     // drawing results
     updateCanvas();
@@ -104,21 +92,8 @@ function projectVelocity(){
     solve(pSolverFunction);
     setBnd('p');
     calcPGrandient(cells);
-    const vDivDebug = generateQuery(cells, 'vDiv');
-    const pDebug = generateQuery(cells, 'p');
-    const velDebug = generateQuery(cells, 'vel', formatVel)
-    const pGradDebug = generateQuery(cells, 'pGrad', formatVel);
     substractFields('vel', 'pGrad');
 }
-
-// function muteVelocities(){
-//     for(let i = 0; i < cellCount; i++){
-//         for(let j = 0; j < cellCount; j++){ 
-//             cells[i][j].vel[0] *= muteFactor
-//             cells[i][j].vel[1] *= muteFactor;
-//         } 
-//     }
-// }
 
 
 // inits, resets and handlers
@@ -280,9 +255,6 @@ function myAdvect(interval, attr){
     for(let y = 1; y < cellCount - 1; y++){
         for(let x = 1; x < cellCount - 1; x++){
             const cell = cells[y][x];
-            if (isNaN(cell.vel[0]) || isNaN(cell.vel[0])){
-                console.log("lol")
-            }
             const newPos = [x + 0.5 + cell.vel[0] * interval * advectionSpeed, y + 0.5 + cell.vel[1] * interval * advectionSpeed];
             moveForward(attr, newPos, currData[y][x][attr]);
         }
@@ -307,9 +279,6 @@ function moveForward(attr, newPos, movedVal){
 
     if (attr === 'vel'){
         let k = (1 - x.float) * (1 - y.float);                    // topLeft
-        if (cells[y.int][x.int] === undefined){
-            console.log("pam");
-        } 
         cells[y.int][x.int].vel[0] += movedVal[0] * k;
         cells[y.int][x.int].vel[1] += movedVal[1] * k;
         k = (1 - x.float) * y.float;                              // bottomLeft
@@ -414,32 +383,3 @@ function drawRect(x, y, alpha){
     ctx.fillStyle = `rgba(${color[0]}, ${color[1]}, ${color[2]}, ${Math.min(5 * alpha, 1)})`;
     ctx.fill(); 
 }
-
-
-// debug
-function generateQuery(objects, attr, formatFunc){
-    const res = [];
-    for(let i = 0; i < objects.length; i++){
-        res[i] = [];
-        for(let j = 0; j < objects.length; j++){
-            if (formatFunc){
-                res[i][j] = formatFunc(objects[i][j][attr]);
-            }
-            else{
-                if (objects[i][j][attr]){
-                    res[i][j] = objects[i][j][attr].toFixed(2);
-                }
-                else{
-                    res[i][j] = undefined;
-                }
-            }
-        }    
-    }
-    return res;
-}
-
-
-function formatVel(vel){
-    if (vel) return vel[0].toFixed(2) + ',' + vel[1].toFixed(2);
-}
-    
