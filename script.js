@@ -8,20 +8,23 @@
 
 
 // global variables
-const canvas = document.querySelector("canvas"),
-      ctx = canvas.getContext("2d"),
+const canvas = document.querySelector('canvas'),
+      ctx = canvas.getContext('2d'),
       color = [255, 51, 255],
       rectWidth = 1,
       rectHeight = 1,
       cellCount = 25,
       solverError = 0.01,
       cells = [],
-      diffusionFactor = 0.001,
-      advectionSpeed = 0.001,
-      velMultiplier = 0.5,
+      advectionSpeed = 0.01,
       densityInput = 1,
-      divFactor = 0.5 / cellCount 
+      velMultiplier = 1,
+      diffusionFactor = 0.000005 * cellCount * cellCount,
+      divFactor = 0.5 / cellCount,
+      gradFactor = divFactor * 1500,
+      deltaTimeFactor = cellCount,
       muteFactor = 0.95;
+
     
 
 let lastClick,
@@ -30,8 +33,8 @@ let lastClick,
     userInput;
 
 const debugInterval = 4;
-canvas.setAttribute('width', `${cellCount}px`);
-canvas.setAttribute('height', `${cellCount}px`);
+canvas.setAttribute('width', `${cellCount - 2}px`);
+canvas.setAttribute('height', `${cellCount - 2}px`);
 
 
 // listeners
@@ -71,20 +74,20 @@ function loop(currTime){
     resetPressure();
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     if (userInput){
-        console.log("do nothing")
+        console.log('do nothing')
     }
     handleUserInput();
 
     // velocity handling
-    diffuse(interval, "vel");
+    diffuse(interval, 'vel');
     projectVelocity();
-    advect(interval, "vel");
+    myAdvect(interval, 'vel');
     projectVelocity();
     
 
     // density handling
-    advect(interval);
-    diffuse(interval, "p");
+    myAdvect(interval, 'd');
+    diffuse(interval, 'd');
     // let dDebug = generateQuery(cells, 'd');
     // dDebug = generateQuery(cells, 'd');
     
@@ -105,7 +108,7 @@ function projectVelocity(){
     const pDebug = generateQuery(cells, 'p');
     const velDebug = generateQuery(cells, 'vel', formatVel)
     const pGradDebug = generateQuery(cells, 'pGrad', formatVel);
-    substractFields("vel", "pGrad");
+    substractFields('vel', 'pGrad');
 }
 
 // function muteVelocities(){
@@ -158,8 +161,8 @@ function handleUserInput(){
 function calcVelDivergance(field){
     for(let i = 1; i < cellCount - 1; i++){
         for(let j = 1; j < cellCount - 1; j++){
-            field[i][j].vDiv = field[i][j + 1].vel[0] - field[i][j - 1].vel[0] +
-                field[i + 1][j].vel[1] - field[i - 1][j].vel[1];   
+            field[i][j].vDiv = divFactor * (field[i][j + 1].vel[0] - field[i][j - 1].vel[0] +
+                field[i + 1][j].vel[1] - field[i - 1][j].vel[1]);   
         }   
     }
 }
@@ -168,8 +171,8 @@ function calcVelDivergance(field){
 function calcPGrandient(field){
     for(let i = 1; i < cellCount - 1; i++){
         for(let j = 1; j < cellCount - 1; j++){
-            field[i][j].pGrad = [field[i][j + 1].p - field[i][j - 1].p,
-                field[i + 1][j].p - field[i - 1][j].p];  
+            field[i][j].pGrad = [ gradFactor * (field[i][j + 1].p - field[i][j - 1].p),
+                gradFactor * (field[i + 1][j].p - field[i - 1][j].p)];  
         }   
     }
 }
@@ -191,7 +194,7 @@ function diffuse(interval, attr){
         prevData[i] = [];
         for(let j = 0; j < cellCount; j++){
             prevData[i][j] = {};
-            if (attr === "vel"){
+            if (attr === 'vel'){
                 prevData[i][j][attr] = [...cells[i][j][attr]];
             }
             else{
@@ -199,7 +202,6 @@ function diffuse(interval, attr){
             }
         }
     }
-    const prevDebug = generateQuery(prevData, attr); 
 
     function solveVelDiffusion(i, j){
         const tmp = [...cells[i][j].vel];
@@ -217,8 +219,8 @@ function diffuse(interval, attr){
         return Math.abs(tmp - cells[i][j].d);
     }
 
-    if (attr === "vel") solve(solveVelDiffusion);
-    if (attr === "d") solve(solveDensityDiffusion);
+    if (attr === 'vel') solve(solveVelDiffusion);
+    if (attr === 'd') solve(solveDensityDiffusion);
     setBnd(attr);
 }
 
@@ -236,40 +238,6 @@ function solve(solveFunction){
 }
 
 
-function advect(interval, attr){
-    // saving data before update
-    const prevData = [];
-    for(let i = 0; i < cellCount; i++){
-        prevData[i] = [];
-        for(let j = 0; j < cellCount; j++){
-            if (attr === 'vel'){
-                prevData[i][j] = {
-                    vel: cells[i][j].vel
-                }
-            }
-            else{
-                prevData[i][j] = {
-                    d: cells[i][j].d,
-                    vel: cells[i][j].vel
-                }
-            }
-        }
-    }
-    
-    // updating data
-    for(let y = 0; y < cellCount; y++){
-        for(let x = 0; x < cellCount; x++){
-            const cell = cells[y][x]; 
-            const prevPos = [x + 0.5 - cell.vel[0] * interval * advectionSpeed, y + 0.5 - cell.vel[1] * interval * advectionSpeed];
-            if (isNaN(prevPos[0]) || isNaN(prevPos[1])){
-                console.log("debug1");
-            }
-            cell[attr] = getNewValue(prevData, attr, prevPos);
-        }
-    }
-    setBnd(attr);
-}
-
 function validatePosition(pos){
     if (pos.float < 0){
         pos.int -= 1;
@@ -286,54 +254,88 @@ function validatePosition(pos){
 }
 
 
-function getNewValue(prevData, attr, prevPos){
+function myAdvect(interval, attr){
+    // saving data before update
+    const currData = [];
+    for(let i = 0; i < cellCount; i++){
+        currData[i] = [];
+        for(let j = 0; j < cellCount; j++){
+            if (attr === 'vel'){
+                currData[i][j] = {
+                    vel: [...cells[i][j].vel]
+                }
+                cells[i][j].vel[0] = 0;
+                cells[i][j].vel[1] = 0;
+            }
+            else{
+                currData[i][j] = {
+                    d: cells[i][j].d,
+                    vel: [...cells[i][j].vel]
+                }
+                cells[i][j].d = 0;
+            }
+        }
+    }
+    
+    for(let y = 1; y < cellCount - 1; y++){
+        for(let x = 1; x < cellCount - 1; x++){
+            const cell = cells[y][x];
+            if (isNaN(cell.vel[0]) || isNaN(cell.vel[0])){
+                console.log("lol")
+            }
+            const newPos = [x + 0.5 + cell.vel[0] * interval * advectionSpeed, y + 0.5 + cell.vel[1] * interval * advectionSpeed];
+            moveForward(attr, newPos, currData[y][x][attr]);
+        }
+    }
+    setBnd('vel');
+}
+
+
+function moveForward(attr, newPos, movedVal){
     const x = {
-        int: Math.floor(prevPos[0])   
+        int: Math.floor(newPos[0])   
     }        
-    x.float = prevPos[0] - x.int - 0.5; 
+    x.float = newPos[0] - x.int - 0.5; 
 
     const y = {
-        int: Math.floor(prevPos[1])
+        int: Math.floor(newPos[1])
     } 
-    y.float = prevPos[1] - y.int - 0.5; 
+    y.float = newPos[1] - y.int - 0.5; 
 
     validatePosition(x);
     validatePosition(y);
 
-    if (attr === "vel"){
-        let newVel = [0, 0],
-            k = (1 - x.float) * (1 - y.float);                    // topLeft
-        if (prevData[y.int][x.int] === undefined){
-            console.log("debug1");
-        }
-        newVel[0] += prevData[y.int][x.int].vel[0] * k;
-        newVel[1] += prevData[y.int][x.int].vel[1] * k;
+    if (attr === 'vel'){
+        let k = (1 - x.float) * (1 - y.float);                    // topLeft
+        if (cells[y.int][x.int] === undefined){
+            console.log("pam");
+        } 
+        cells[y.int][x.int].vel[0] += movedVal[0] * k;
+        cells[y.int][x.int].vel[1] += movedVal[1] * k;
         k = (1 - x.float) * y.float;                              // bottomLeft
-        newVel[0] += prevData[y.int + 1][x.int].vel[0] * k;
-        newVel[1] += prevData[y.int + 1][x.int].vel[1] * k;
+        cells[y.int + 1][x.int].vel[0] += movedVal[0] * k;
+        cells[y.int + 1][x.int].vel[1] += movedVal[1] * k;
         k = x.float * (1 - y.float);                              // topRight
-        newVel[0] += prevData[y.int][x.int + 1].vel[0] * k;
-        newVel[1] += prevData[y.int][x.int + 1].vel[1] * k;
+        cells[y.int][x.int + 1].vel[0] += movedVal[0] * k;
+        cells[y.int][x.int + 1].vel[1] += movedVal[1] * k;
         k = x.float * y.float;                                    // bottomRight
-        newVel[0] += prevData[y.int + 1][x.int + 1].vel[0] * k;
-        newVel[1] += prevData[y.int + 1][x.int + 1].vel[1] * k;
-        return newVel;
+        cells[y.int + 1][x.int + 1].vel[0] += movedVal[0] * k;
+        cells[y.int + 1][x.int + 1].vel[1] += movedVal[1] * k;
     }
     else{
-        let newD = 0;
-        newD += prevData[y.int][x.int].d * (1 - x.float) * (1 - y.float);
-        newD += prevData[y.int + 1][x.int].d * (1 - x.float) * y.float;
-        newD += prevData[y.int][x.int + 1].d * x.float * (1 - y.float);
-        newD += prevData[y.int + 1][x.int + 1].d * x.float * y.float;
-        return newD;
+        cells[y.int][x.int].d += movedVal * (1 - x.float) * (1 - y.float);
+        cells[y.int + 1][x.int].d += movedVal * (1 - x.float) * y.float;
+        cells[y.int][x.int + 1].d += movedVal * x.float * (1 - y.float);
+        cells[y.int + 1][x.int + 1].d += movedVal * x.float * y.float;
     }
 }
+
 
 
 function setBnd(attr){
     const N = cellCount - 1;
     for(let i = 0; i < cellCount; i++){
-        if (attr === "vel"){
+        if (attr === 'vel'){
             cells[i][0].vel[0] = -cells[i][1].vel[0];
             cells[i][N].vel[0] = -cells[i][N - 1].vel[0];
             cells[0][i].vel[1] = -cells[1][i].vel[1];
@@ -347,7 +349,7 @@ function setBnd(attr){
         }
     }
 
-    if (attr === "vel"){
+    if (attr === 'vel'){
         cells[0][0].vel[0] = (cells[0][1].vel[0] + cells[1][0].vel[0]) / 2;
         cells[0][0].vel[1] = (cells[0][1].vel[1] + cells[1][0].vel[1]) / 2;
 
@@ -369,6 +371,15 @@ function setBnd(attr){
 }
 
 
+function addFields(from, what){
+    for(let i = 1; i < cellCount - 1; i++){
+        for(let j = 1; j < cellCount - 1; j++){
+            cells[i][j][from][0] += cells[i][j][what][0];
+            cells[i][j][from][1] += cells[i][j][what][1];
+        }
+    }
+}
+
 function substractFields(from, what){
     for(let i = 1; i < cellCount - 1; i++){
         for(let j = 1; j < cellCount - 1; j++){
@@ -383,7 +394,7 @@ function substractFields(from, what){
 function updateCanvas(){
     for(let y = 1; y < cellCount-1; y++){
         for(let x = 1; x < cellCount-1; x++){
-            drawRect(x, y, cells[y][x].d);
+            drawRect(x-1, y-1, cells[y][x].d);
         }   
     }
 }
@@ -415,7 +426,12 @@ function generateQuery(objects, attr, formatFunc){
                 res[i][j] = formatFunc(objects[i][j][attr]);
             }
             else{
-                res[i][j] = objects[i][j][attr];
+                if (objects[i][j][attr]){
+                    res[i][j] = objects[i][j][attr].toFixed(2);
+                }
+                else{
+                    res[i][j] = undefined;
+                }
             }
         }    
     }
