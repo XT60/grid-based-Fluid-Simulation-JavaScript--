@@ -13,13 +13,13 @@ const canvas = document.querySelector('canvas'),
       color = [255, 51, 255],
       rectWidth = 1,
       rectHeight = 1,
-      cellCount = 80,
+      cellCount = 20,
       solverError = 0.01,
       cells = [],
-      advectionSpeed = 0.01,
+      advectionSpeed = 0.001,
       densityInput = 1,
       velMultiplier = 1,
-      diffusionFactor = 0.000005 * cellCount * cellCount,
+      diffusionFactor = 0.0000004 * cellCount * cellCount,
       divFactor = 0.5 / cellCount,
       gradFactor = divFactor * 1500,
       deltaTimeFactor = cellCount,
@@ -32,7 +32,6 @@ let lastClick,
     flag = false,
     userInput;
 
-const debugInterval = 4;
 canvas.setAttribute('width', `${cellCount - 2}px`);
 canvas.setAttribute('height', `${cellCount - 2}px`);
 
@@ -64,11 +63,13 @@ function loop(currTime){
         flag = true;
         initializeCells();
     }
-    // const interval = currTime - lastTime;
-    const interval = debugInterval;
+    const interval = currTime - lastTime;
+
     resetPressure();
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    handleUserInput();
+    if (userInput){
+        handleUserInput();
+    }
 
     // velocity handling
     diffuse(interval, 'vel');
@@ -383,3 +384,32 @@ function drawRect(x, y, alpha){
     ctx.fillStyle = `rgba(${color[0]}, ${color[1]}, ${color[2]}, ${Math.min(5 * alpha, 1)})`;
     ctx.fill(); 
 }
+
+
+// debug
+function generateQuery(objects, attr, formatFunc){
+    const res = [];
+    for(let i = 0; i < objects.length; i++){
+        res[i] = [];
+        for(let j = 0; j < objects.length; j++){
+            if (formatFunc){
+                res[i][j] = formatFunc(objects[i][j][attr]);
+            }
+            else{
+                if (objects[i][j][attr]){
+                    res[i][j] = objects[i][j][attr].toFixed(2);
+                }
+                else{
+                    res[i][j] = undefined;
+                }
+            }
+        }    
+    }
+    return res;
+}
+
+
+function formatVel(vel){
+    if (vel) return vel[0].toFixed(2) + ',' + vel[1].toFixed(2);
+}
+    
