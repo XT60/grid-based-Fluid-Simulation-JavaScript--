@@ -1,4 +1,4 @@
-
+// config constants
 const canvas = document.querySelector('canvas'),
       ctx = canvas.getContext('2d'),
       minInterval = 17,
@@ -7,16 +7,16 @@ const canvas = document.querySelector('canvas'),
       cellCount = 80,
       solverError = 0.01,
       cells = [],
+
+      // factors
       advectionSpeed = 0.0002,
-      densityInput = 1,
       velMultiplier = 0.4,
       diffusionFactor = 0.0000000003 * cellCount * cellCount,
       divFactor = 0.5 / cellCount,
       gradFactor = divFactor * 1000,
-      deltaTimeFactor = cellCount;
 
-// colors
-const yellow = [255, 211, 0],
+      // colors
+      yellow = [255, 211, 0],
       pink = [222, 56, 200],
       purple = [101, 46, 199],
       colorVectors = {
@@ -26,10 +26,10 @@ const yellow = [255, 211, 0],
         bigAlpha: [
             0.5 * (yellow[0] - pink[0]), 0.5 * (yellow[1] - pink[1]), 0.5 * (yellow[2] - pink[2])
         ]
-    }
+    },
 
-// force
-const velUnit = 0.20,
+      // force
+      velUnit = 0.20,
       dUnit = 0.33,
       forceGradient = [
         [0, 0, 1, 1, 1, 0, 0],
@@ -42,15 +42,14 @@ const velUnit = 0.20,
     ];
 
     
-
 let lastClick,
     lastTime, 
     flag = false,
     userInput;
 
+
 canvas.setAttribute('width', `${cellCount - 2}px`);
 canvas.setAttribute('height', `${cellCount - 2}px`);
-
 
 // listeners
 document.addEventListener('mousedown', (e) => {
@@ -72,11 +71,6 @@ document.addEventListener('mouseup', (e) => {
         lastClick = undefined;   
     }
 });
-
-
-function clamp(val, start, end){
-    return Math.min(end, Math.max(val, start));
-}
 
 
 // main loop
@@ -104,12 +98,9 @@ function loop(currTime){
     // velocity handling
     diffuse(interval, 'vel');
     projectVelocity();
-    const velDebug = generateQuery(cells, 'vel', formatVel);
     myAdvect(interval, 'vel');
     projectVelocity();
     
-
-
     // drawing results
     updateCanvas();
     requestAnimationFrame(loop);
@@ -122,10 +113,6 @@ function projectVelocity(){
     solve(pSolverFunction);
     setBnd('p');
     calcPGrandient(cells);
-    const vDivDebug = generateQuery(cells, 'vDiv');
-    const pDebug = generateQuery(cells, 'p');
-    const velDebug = generateQuery(cells, 'vel', formatVel)
-    const pGradDebug = generateQuery(cells, 'pGrad', formatVel);
     substractFields('vel', 'pGrad');
 }
 
@@ -214,7 +201,6 @@ function pSolverFunction(i, j){
 
 
 function diffuse(interval, attr){
-    // saving data before update
     const prevData = [];
     for(let i = 0; i < cellCount; i++){
         prevData[i] = [];
@@ -280,8 +266,7 @@ function validatePosition(pos){
 }
 
 
-function myAdvect(interval, attr){
-    // saving data before update
+function myAdvect(interval, attr){         // Jos Stam's article mentions it as "bad" method, I am gonna leave it as is for now 
     const currData = [];
     for(let i = 0; i < cellCount; i++){
         currData[i] = [];
@@ -351,7 +336,6 @@ function moveForward(attr, newPos, movedVal){
 }
 
 
-
 function setBnd(attr){
     const N = cellCount - 1;
     for(let i = 0; i < cellCount; i++){
@@ -391,25 +375,6 @@ function setBnd(attr){
 }
 
 
-function addFields(from, what){
-    for(let i = 1; i < cellCount - 1; i++){
-        for(let j = 1; j < cellCount - 1; j++){
-            cells[i][j][from][0] += cells[i][j][what][0];
-            cells[i][j][from][1] += cells[i][j][what][1];
-        }
-    }
-}
-
-function substractFields(from, what){
-    for(let i = 1; i < cellCount - 1; i++){
-        for(let j = 1; j < cellCount - 1; j++){
-            cells[i][j][from][0] -= cells[i][j][what][0];
-            cells[i][j][from][1] -= cells[i][j][what][1];
-        }
-    }
-}
-
-
 // DOM elements functions
 function updateCanvas(){
     for(let y = 1; y < cellCount-1; y++){
@@ -418,7 +383,6 @@ function updateCanvas(){
         }   
     }
 }
-
 
 function getMousePos(e){
     const rect = canvas.getBoundingClientRect(),
@@ -451,6 +415,7 @@ function generateColor(alpha){
 }
 
 
+// helpers
 function addVec(vecA, vecB){
     if (vecA.length != vecB.length){
         throw new Error("different vectors length")
@@ -494,7 +459,6 @@ function generateQuery(objects, attr, formatFunc){
     return res;
 }
 
-
 function formatVel(vel){
     if (vel) {
         if (isNaN(vel[0]) || isNaN(vel[1])){
@@ -504,3 +468,25 @@ function formatVel(vel){
     }
 }
     
+function clamp(val, start, end){
+    return Math.min(end, Math.max(val, start));
+}
+
+
+function addFields(from, what){
+    for(let i = 1; i < cellCount - 1; i++){
+        for(let j = 1; j < cellCount - 1; j++){
+            cells[i][j][from][0] += cells[i][j][what][0];
+            cells[i][j][from][1] += cells[i][j][what][1];
+        }
+    }
+}
+
+function substractFields(from, what){
+    for(let i = 1; i < cellCount - 1; i++){
+        for(let j = 1; j < cellCount - 1; j++){
+            cells[i][j][from][0] -= cells[i][j][what][0];
+            cells[i][j][from][1] -= cells[i][j][what][1];
+        }
+    }
+}

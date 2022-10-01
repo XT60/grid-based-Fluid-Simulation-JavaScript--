@@ -1,15 +1,15 @@
-body{
+body {
   background-color: black;
 }
 
 canvas {
-  /* border: 5px solid black; */
-  width: 600px;
-  height: 600px;
+  border: 1px solid #33135c;
+  width: 400px;
+  height: 400px;
   background-color: black;
-  /* image-rendering: -moz-crisp-edges;
+  image-rendering: -moz-crisp-edges;
   image-rendering: -webkit-crisp-edges;
   -ms-interpolation-mode: nearest-neighbor;
       image-rendering: pixelated;
-  image-rendering: crisp-edges; */
+  image-rendering: crisp-edges;
 }

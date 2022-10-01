@@ -1,8 +1,12 @@
+body{
+    background-color: black;
+}
+
 canvas{
-    border: 1px solid black;
+    border: 1px solid #33135c;
     width: 400px;
     height: 400px;
-    background-color: beige;
+    background-color: black;
     image-rendering: -moz-crisp-edges;
     image-rendering: -webkit-crisp-edges;
     image-rendering: pixelated;
