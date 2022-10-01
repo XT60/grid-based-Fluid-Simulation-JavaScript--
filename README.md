@@ -1,4 +1,5 @@
 # 🌊 Fluid Simulation
+Code creates simple grid based fluid simualtion that you can play with, graphics are displayed on HTML canvas element so no need for installing graphics redndering libraries. 
 
 ## 👨‍💻 Authors
 - [@XT60](https://github.com/XT60)
@@ -8,5 +9,4 @@
 - [Shahriar Shahrabi post "Gentle Introduction to Realtime Fluid Simulation for Programmers and Technical Artists"](https://shahriyarshahrabi.medium.com/gentle-introduction-to-fluid-simulation-for-programmers-and-technical-artists-7c0045c40bac)
 
 ## ✉ Feedback
-If you have any feedback, please checkout sources listed above or reach out to me on private message
-  
+If you have any questions please checkout sources listed above or reach out to me on private message.
