@@ -1,29 +1,45 @@
-// Plan:
-//     1. calculate initial velocitiy field
-//     2. solve for diffusion
-//     3. calculate Divergance(initial velocity field)
-//     4. solve for pressure
-//     5. calculate pressure Grandient
-//     6. from initial velocity field substract velocities created by pressure
 
-
-// global variables
 const canvas = document.querySelector('canvas'),
       ctx = canvas.getContext('2d'),
-      color = [255, 51, 255],
+      minInterval = 17,
       rectWidth = 1,
       rectHeight = 1,
-      cellCount = 20,
+      cellCount = 80,
       solverError = 0.01,
       cells = [],
-      advectionSpeed = 0.001,
+      advectionSpeed = 0.0002,
       densityInput = 1,
-      velMultiplier = 1,
-      diffusionFactor = 0.0000004 * cellCount * cellCount,
+      velMultiplier = 0.4,
+      diffusionFactor = 0.0000000003 * cellCount * cellCount,
       divFactor = 0.5 / cellCount,
-      gradFactor = divFactor * 1500,
-      deltaTimeFactor = cellCount,
-      muteFactor = 0.95;
+      gradFactor = divFactor * 1000,
+      deltaTimeFactor = cellCount;
+
+// colors
+const yellow = [255, 211, 0],
+      pink = [222, 56, 200],
+      purple = [101, 46, 199],
+      colorVectors = {
+        smallAlpha: [
+            0.5 * (pink[0] - purple[0]), 0.5 * (pink[1] - purple[1]), 0.5 * (pink[2] - purple[2])
+        ],
+        bigAlpha: [
+            0.5 * (yellow[0] - pink[0]), 0.5 * (yellow[1] - pink[1]), 0.5 * (yellow[2] - pink[2])
+        ]
+    }
+
+// force
+const velUnit = 0.20,
+      dUnit = 0.33,
+      forceGradient = [
+        [0, 0, 1, 1, 1, 0, 0],
+        [0, 1, 1, 1, 1, 1, 0],
+        [1, 1, 2, 2, 2, 1, 1],
+        [1, 1, 2, 3, 2, 1, 1],
+        [1, 1, 2, 2, 2, 1, 1],
+        [0, 1, 1, 1, 1, 1, 0],
+        [0, 0, 1, 1, 1, 0, 0]
+    ];
 
     
 
@@ -42,18 +58,25 @@ document.addEventListener('mousedown', (e) => {
 });
 
 document.addEventListener('mouseup', (e) => {
-    const x = Math.floor(lastClick[0]),
-          y = Math.floor(lastClick[1]),
-          currPos = getMousePos(e),
-          vel = [velMultiplier * (currPos[0] - lastClick[0]),
-            velMultiplier * (currPos[1] - lastClick[1])];
-    userInput = {
-        x,
-        y,
-        vel
-    };
-    lastClick = undefined;
+    if (lastClick){
+        const x = Math.floor(lastClick[0]) + 1,
+        y = Math.floor(lastClick[1]) + 1,
+        currPos = getMousePos(e),
+        direction = [clamp(velMultiplier * (currPos[0] - lastClick[0]), -1 , 1),
+            clamp(velMultiplier * (currPos[1] - lastClick[1]), -1, 1)];
+        userInput = {
+            x,
+            y,
+            direction
+        };
+        lastClick = undefined;   
+    }
 });
+
+
+function clamp(val, start, end){
+    return Math.min(end, Math.max(val, start));
+}
 
 
 // main loop
@@ -64,6 +87,9 @@ function loop(currTime){
         initializeCells();
     }
     const interval = currTime - lastTime;
+    if (interval < minInterval){
+        window.requestAnimationFrame(loop)
+    }
 
     resetPressure();
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -71,21 +97,24 @@ function loop(currTime){
         handleUserInput();
     }
 
+    // density handling
+    diffuse(interval, 'd');
+    myAdvect(interval, 'd');
+
     // velocity handling
     diffuse(interval, 'vel');
     projectVelocity();
+    const velDebug = generateQuery(cells, 'vel', formatVel);
     myAdvect(interval, 'vel');
     projectVelocity();
     
-    // density handling
-    myAdvect(interval, 'd');
-    diffuse(interval, 'd');
+
 
     // drawing results
     updateCanvas();
     requestAnimationFrame(loop);
 }
-window.requestAnimationFrame(loop)
+window.requestAnimationFrame(loop);
 
 
 function projectVelocity(){
@@ -93,6 +122,10 @@ function projectVelocity(){
     solve(pSolverFunction);
     setBnd('p');
     calcPGrandient(cells);
+    const vDivDebug = generateQuery(cells, 'vDiv');
+    const pDebug = generateQuery(cells, 'p');
+    const velDebug = generateQuery(cells, 'vel', formatVel)
+    const pGradDebug = generateQuery(cells, 'pGrad', formatVel);
     substractFields('vel', 'pGrad');
 }
 
@@ -125,10 +158,27 @@ function resetPressure(){
 
 function handleUserInput(){
     if (userInput){
-        const cell = cells[userInput.y][userInput.x];
-        cell.vel = userInput.vel;
-        cell.d = densityInput;
+        applyForces(userInput.x, userInput.y, userInput.direction);
         userInput = undefined;
+    }
+}
+
+
+function applyForces(xPos, yPos, direction){
+    let x, y;
+    const half = Math.floor(forceGradient.length / 2);
+    for(let i = 0; i < forceGradient.length; i++){
+        y = yPos + i - half; 
+        if (0 < y && y < cellCount - 1){
+            for(let j = 0; j < forceGradient.length; j++){
+                x = xPos + j - half;
+                if (0 < x && x < cellCount - 1){
+                    cells[y][x].d = Math.min(1, cells[y][x].d + forceGradient[i][j] * dUnit);
+                    cells[y][x].vel[0] += forceGradient[i][j] * velUnit * direction[0];
+                    cells[y][x].vel[1] += forceGradient[i][j] * velUnit * direction[1];
+                }
+            }
+        } 
     }
 }
 
@@ -147,7 +197,7 @@ function calcVelDivergance(field){
 function calcPGrandient(field){
     for(let i = 1; i < cellCount - 1; i++){
         for(let j = 1; j < cellCount - 1; j++){
-            field[i][j].pGrad = [ gradFactor * (field[i][j + 1].p - field[i][j - 1].p),
+            field[i][j].pGrad = [gradFactor * (field[i][j + 1].p - field[i][j - 1].p),
                 gradFactor * (field[i + 1][j].p - field[i - 1][j].p)];  
         }   
     }
@@ -381,8 +431,44 @@ function getMousePos(e){
 function drawRect(x, y, alpha){
     ctx.beginPath();
     ctx.rect(x, y, rectWidth, rectHeight);
+    const color = generateColor(alpha);
     ctx.fillStyle = `rgba(${color[0]}, ${color[1]}, ${color[2]}, ${Math.min(5 * alpha, 1)})`;
     ctx.fill(); 
+}
+
+function generateColor(alpha){
+    let vector, baseColor;
+    if (alpha < 0.5){
+        vector = multiplyVec(alpha, colorVectors.smallAlpha);
+        baseColor = purple;
+    }
+    else{
+        vector = multiplyVec(alpha - 0.5, colorVectors.bigAlpha);
+        baseColor = pink;
+    }
+    return addVec(baseColor, vector);
+
+}
+
+
+function addVec(vecA, vecB){
+    if (vecA.length != vecB.length){
+        throw new Error("different vectors length")
+    }
+    const res = []; 
+    for(let i  = 0; i < vecA.length; i++){
+        res[i] = vecA[i] + vecB[i];
+    }
+    return res;
+}
+
+
+function multiplyVec(scalar, vec){
+    const res = []; 
+    for(let i  = 0; i < vec.length; i++){
+        res[i] = scalar * vec[i];
+    }
+    return res;
 }
 
 
@@ -396,7 +482,7 @@ function generateQuery(objects, attr, formatFunc){
                 res[i][j] = formatFunc(objects[i][j][attr]);
             }
             else{
-                if (objects[i][j][attr]){
+                if (objects[i][j][attr] !== undefined){
                     res[i][j] = objects[i][j][attr].toFixed(2);
                 }
                 else{
@@ -410,6 +496,11 @@ function generateQuery(objects, attr, formatFunc){
 
 
 function formatVel(vel){
-    if (vel) return vel[0].toFixed(2) + ',' + vel[1].toFixed(2);
+    if (vel) {
+        if (isNaN(vel[0]) || isNaN(vel[1])){
+            console.log('nan');
+        }
+        return vel[0].toFixed(1) + ',' + vel[1].toFixed(1);
+    }
 }
     
